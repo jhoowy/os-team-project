@@ -115,11 +115,21 @@ int search_dir(const char *path, dir_t **buf) {
 
 int check_permission(dir_t *entry) {
 	int permission = 0;
+	int gidsize;
+	gid_t *groups;
 	struct fuse_context *context = fuse_get_context();
 	if (context->uid == entry->md.st_uid)
 		permission = permission | ((entry->md.st_mode & 0700) >> 6);
-	if (context->gid == entry->md.st_gid)
-		permission = permission | ((entry->md.st_mode & 070) >> 3);
+	gidsize = getgroups(0, NULL);
+	if ((groups = (gid_t*)malloc(gidsize * sizeof(gid_t))) == NULL)
+		return -ENOMEM;
+	getgroups(gidsize, groups);
+	for (int i = 0; i < gidsize; ++i) {
+		if (groups[i] == entry->md.st_gid) {
+			permission = permission | ((entry->md.st_mode & 070) >> 3);
+			break;
+		}
+	}
 	permission = permission | (entry->md.st_mode & 07);
 	if (context->uid == 0)
 		permission = 7;
@@ -491,8 +501,10 @@ static int ost25_rename(const char *oldpath, const char *newpath) {
 	char *oldname = current->name;
 	dir_t *child_t = p->child;
 	while (child_t != NULL) {
-		if (strcmp(child_t->name, newname + 1) == 0)
-			return -EEXIST;
+		if (strcmp(child_t->name, newname + 1) == 0) {
+			remove_dir(child_t);
+			break;
+		}
 		child_t = child_t->next;
 	}
 
