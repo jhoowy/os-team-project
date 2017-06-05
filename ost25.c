@@ -152,6 +152,22 @@ static void *ost25_init(struct fuse_conn_info *conn) {
 	return NULL;
 }
 
+static int ost25_access(const char *path, int mask) {
+	dir_t *current;
+
+	if (search_dir(path, &current) != 0)
+		return -ENOENT;
+
+	if ((mask & 01) == 0)
+		return -EACCES;
+
+	int permission = check_permission(current);
+	if ((permission & 01) == 0)
+		return -EACCES;
+	
+	return 0;
+}
+
 static int ost25_getattr(const char *path, struct stat *stbuf)
 {	
 	dir_t *current;
@@ -164,7 +180,7 @@ static int ost25_getattr(const char *path, struct stat *stbuf)
 	return 0;	
 }
 
-static int ost25_opendir(const char *path, struct fuse_file_info *fi) {
+/* static int ost25_opendir(const char *path, struct fuse_file_info *fi) {
 	dir_t *current;
 
 	if (fi != NULL && (dir_t*)fi->fh != NULL) {
@@ -181,7 +197,7 @@ static int ost25_opendir(const char *path, struct fuse_file_info *fi) {
 		return -EACCES;
 
 	return 0;
-}
+} */
 
 static int ost25_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 			 off_t offset, struct fuse_file_info *fi)
@@ -531,6 +547,24 @@ static int ost25_rename(const char *oldpath, const char *newpath) {
 	return 0;
 }
 
+static int ost25_chmod(const char* path, mode_t mode)
+{
+	dir_t* current;
+	// if there is no path,
+	if (search_dir(path, &current) != 0) {
+		return -ENOENT;
+	}
+
+	// if user is not root or owner,
+	struct fuse_context *context = fuse_get_context();
+	if (context->uid != 0 && context->uid != current->md.st_uid)
+		return -EACCES;
+
+	current->md.st_mode = mode;
+	current->md.st_ctime = time(NULL);
+	return 0;
+}
+
 static int ost25_flush(const char *path, struct fuse_file_info *fi) {
 	fi->flush = 1;
 	return 0;
@@ -543,6 +577,7 @@ static int ost25_release(const char *path, struct fuse_file_info *fi) {
 
 static struct fuse_operations ost25_oper = {
 	.init		= ost25_init,
+	.access		= ost25_access,
 	.getattr	= ost25_getattr,
 	.readdir	= ost25_readdir,
 	.open		= ost25_open,
@@ -551,11 +586,12 @@ static struct fuse_operations ost25_oper = {
 	.write		= ost25_write,
 	.mknod		= ost25_mknod,
 	.create		= ost25_create,
-	.opendir	= ost25_opendir,
+//	.opendir	= ost25_opendir,
 	.mkdir		= ost25_mkdir,
 	.unlink		= ost25_unlink,
 	.rmdir		= ost25_rmdir,
 	.rename		= ost25_rename,
+	.chmod		= ost25_chmod,
 	.flush		= ost25_flush,
 	.release	= ost25_release,
 };
