@@ -44,6 +44,9 @@ int insert_dir(dir_t *p, dir_t *c) {
 		}
 		prev->next = c;
 	}
+	
+	if (c->md.st_mode & S_IFDIR)
+		p->md.st_nlink++;
 
 	return 1;
 }
@@ -58,15 +61,15 @@ int remove_dir(dir_t *c) {
 	
 	dir_t *prev = p->child;
 	if (prev == c) {
-		p->child = NULL;
+		p->child = c->next;
 	}
 	else {
 		while (prev->next != c)
 			prev = prev->next;
 		prev->next = c->next;
 	}
-
-	p->md.st_nlink--;
+	if (c->md.st_mode & S_IFDIR)
+		p->md.st_nlink--;
 	if (c->name != NULL)
 		free(c->name);
 	if (c->data != NULL)
@@ -321,8 +324,11 @@ static int ost25_mknod(const char *path, mode_t mode, dev_t rdev) {
 	memcpy(path_p, path, last - path + 1);
 	path_p[last - path + 1] = '\0';
 
-	if (search_dir(path_p, &p) != 0)
+	if (search_dir(path_p, &p) != 0){
+		free(path_p);
 		return -ENOENT;
+	}
+	free(path_p);
 
 	int permission = check_permission(p);
 	if ((permission & 02) == 0)
@@ -334,8 +340,8 @@ static int ost25_mknod(const char *path, mode_t mode, dev_t rdev) {
 	if (node == NULL)
 		return -ENOMEM;
 	node->md.st_mode = mode;
-	node->name = (char *)calloc(sizeof(last + 1), sizeof(char));
-	memcpy(node->name, last + 1, sizeof(last + 1));
+	node->name = (char *)calloc(strlen(last + 1) + 1, sizeof(char));
+	memcpy(node->name, last + 1, strlen(last + 1) + 1);
 	node->md.st_nlink = 1;
 	node->md.st_rdev = rdev;
 	node->md.st_uid = context->uid;
@@ -357,9 +363,12 @@ static int ost25_create(const char *path, mode_t mode, struct fuse_file_info *fi
 	memcpy(path_p, path, last - path + 1);
 	path_p[last - path + 1] = '\0';
 
-	if (search_dir(path_p, &p) != 0)
+	if (search_dir(path_p, &p) != 0){
+		free(path_p);
 		return -ENOENT;
+	}
 
+	free(path_p);
 	int permission = check_permission(p);
 	if ((permission & 02) == 0)
 		return -EACCES;
@@ -370,8 +379,8 @@ static int ost25_create(const char *path, mode_t mode, struct fuse_file_info *fi
 	if (node == NULL)
 		return -ENOMEM;
 	node->md.st_mode = mode;
-	node->name = (char *)calloc(sizeof(last + 1), sizeof(char));
-	memcpy(node->name, last + 1, sizeof(last + 1));
+	node->name = (char *)calloc(strlen(last + 1) + 1, sizeof(char));
+	memcpy(node->name, last + 1, strlen(last + 1) + 1);
 	node->md.st_nlink = 1;
 	node->md.st_uid = context->uid;
 	node->md.st_gid = context->gid;
@@ -394,9 +403,12 @@ static int ost25_mkdir(const char *path, mode_t mode){
 	memcpy(path_p, path, last - path + 1);
 	path_p[last - path + 1] = '\0';
 
-	if (search_dir(path_p, &p) != 0)
+	if (search_dir(path_p, &p) != 0) {
+		free(path_p);
 		return -ENOENT;
+	}
 
+	free(path_p);
 	int permission = check_permission(p);
 	if ((permission & 02) == 0)
 		return -EACCES;
@@ -406,10 +418,9 @@ static int ost25_mkdir(const char *path, mode_t mode){
 	dir_t *node = (dir_t *)calloc(1, sizeof(dir_t));
 	if (node == NULL)
 		return -ENOMEM;
-	p->md.st_nlink += 1;
 	node->md.st_mode = mode | S_IFDIR;
-	node->name = (char *)calloc(sizeof(last + 1), sizeof(char));
-	memcpy(node->name, last + 1, sizeof(last + 1));
+	node->name = (char *)calloc(strlen(last + 1) + 1, sizeof(char));
+	memcpy(node->name, last + 1, strlen(last + 1) + 1);
 	node->md.st_nlink = 2;
 	node->md.st_uid = context->uid;
 	node->md.st_gid = context->gid;
@@ -443,6 +454,71 @@ static int ost25_rmdir(const char *path) {
 
 	return remove_dir(current);
 }
+
+static int ost25_rename(const char *oldpath, const char *newpath) {
+	dir_t *current;
+	if (strcmp(oldpath, newpath) == 0)
+		return 0;
+
+	if (search_dir(oldpath, &current) != 0)
+		return -ENOENT;
+	
+	if (current == &root) 
+		return -EROFS;
+
+	int permission = check_permission(current);
+	if ((permission & 02) == 0)
+		return -EACCES;
+
+	// Search new path
+	dir_t *p;
+	char *newname = strrchr(newpath, '/');
+	char *path_p = (char *)calloc(newname - newpath + 2, sizeof(char));
+	memcpy(path_p, newpath, newname - newpath + 1);
+	path_p[newname - newpath + 1] = '\0';
+	
+	if (search_dir(path_p, &p) != 0) {
+		free(path_p);
+		return -ENOENT;
+	}
+	free(path_p);
+	permission = check_permission(p);
+	if ((permission & 02) == 0)
+		return -EACCES;
+	
+		
+	// Check duplicated name
+	char *oldname = current->name;
+	dir_t *child_t = p->child;
+	while (child_t != NULL) {
+		if (strcmp(child_t->name, newname + 1) == 0)
+			return -EEXIST;
+		child_t = child_t->next;
+	}
+
+	if (sizeof(current->name) != strlen(newname + 1) + 1) {
+		if (realloc(current->name, strlen(newname + 1) + 1) == NULL)
+			return -ENOMEM;
+	}
+
+	dir_t *cur_p = current->parent;
+	dir_t *prev = cur_p->child;
+	if (prev == current) {
+		cur_p->child = current->next;
+	}
+	else {
+		while (prev->next != current)
+			prev = prev->next;
+		prev->next = current->next;
+	}
+	if (current->md.st_mode & S_IFDIR)
+		p->md.st_nlink--;
+
+	memcpy(current->name, newname + 1, strlen(newname + 1) + 1);
+	insert_dir(p, current);
+	return 0;
+}
+
 static int ost25_flush(const char *path, struct fuse_file_info *fi) {
 	fi->flush = 1;
 	return 0;
@@ -467,6 +543,7 @@ static struct fuse_operations ost25_oper = {
 	.mkdir		= ost25_mkdir,
 	.unlink		= ost25_unlink,
 	.rmdir		= ost25_rmdir,
+	.rename		= ost25_rename,
 	.flush		= ost25_flush,
 	.release	= ost25_release,
 };
