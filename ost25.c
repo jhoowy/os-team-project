@@ -558,7 +558,6 @@ static int ost25_chmod(const char* path, mode_t mode)
 
 	// if user is not root or owner,
 	struct fuse_context *context = fuse_get_context();
-	printf("\nuid: %d", context->uid);
 	if (context->uid != 0 && context->uid != current->md.st_uid)
 		return -EACCES;
 
