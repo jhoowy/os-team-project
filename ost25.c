@@ -43,6 +43,7 @@ int insert_dir(dir_t *p, dir_t *c) {
 			prev = prev->next;
 		}
 		prev->next = c;
+		c->next = NULL;
 	}
 	
 	if (c->md.st_mode & S_IFDIR)
@@ -557,11 +558,30 @@ static int ost25_chmod(const char* path, mode_t mode)
 
 	// if user is not root or owner,
 	struct fuse_context *context = fuse_get_context();
+	printf("\nuid: %d", context->uid);
 	if (context->uid != 0 && context->uid != current->md.st_uid)
 		return -EACCES;
 
 	current->md.st_mode = mode;
 	current->md.st_ctime = time(NULL);
+	return 0;
+}
+
+static int ost25_chown(const char *path, uid_t uid, gid_t gid)
+{
+	struct fuse_context *context = fuse_get_context();
+	if (context->uid != 0) {
+		return -EACCES;
+	}
+
+	dir_t* current;
+	if (search_dir(path, &current) != 0) {
+		return -ENOENT;
+	}
+
+	current->md.st_uid = uid;
+	current->md.st_gid = gid;
+
 	return 0;
 }
 
@@ -592,6 +612,7 @@ static struct fuse_operations ost25_oper = {
 	.rmdir		= ost25_rmdir,
 	.rename		= ost25_rename,
 	.chmod		= ost25_chmod,
+	.chown		= ost25_chown,
 	.flush		= ost25_flush,
 	.release	= ost25_release,
 };
