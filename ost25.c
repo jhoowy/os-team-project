@@ -181,7 +181,7 @@ static int ost25_getattr(const char *path, struct stat *stbuf)
 	return 0;	
 }
 
-/* static int ost25_opendir(const char *path, struct fuse_file_info *fi) {
+static int ost25_opendir(const char *path, struct fuse_file_info *fi) {
 	dir_t *current;
 
 	if (fi != NULL && (dir_t*)fi->fh != NULL) {
@@ -194,11 +194,11 @@ static int ost25_getattr(const char *path, struct stat *stbuf)
 	}
 	
 	int permission = check_permission(current);
-	if ((permission & 01) == 0)
+	if ((permission & 04) == 0)
 		return -EACCES;
 
 	return 0;
-} */
+}
 
 static int ost25_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 			 off_t offset, struct fuse_file_info *fi)
@@ -605,7 +605,7 @@ static struct fuse_operations ost25_oper = {
 	.write		= ost25_write,
 	.mknod		= ost25_mknod,
 	.create		= ost25_create,
-//	.opendir	= ost25_opendir,
+	.opendir	= ost25_opendir,
 	.mkdir		= ost25_mkdir,
 	.unlink		= ost25_unlink,
 	.rmdir		= ost25_rmdir,
