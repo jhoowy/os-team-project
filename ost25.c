@@ -459,6 +459,21 @@ static int ost25_mkdir(const char *path, mode_t mode){
 
 static int ost25_unlink(const char *path) {
 	dir_t *current;
+	dir_t *p;
+	char *last = strrchr(path, '/');
+	char *path_p = (char *)calloc(last - path + 2, sizeof(char));
+	memcpy(path_p, path, last - path + 1);
+	path_p[last - path + 1] = '\0';
+
+	if (search_dir(path_p, &p) != 0) {
+		free(path_p);
+		return -ENOENT;
+	}
+
+	free(path_p);
+	int permission = check_permission(p);
+	if ((permission & 02) == 0)
+		return -EACCES;
 
 	if (search_dir(path, &current) != 0)
 		return -ENOENT;
@@ -470,6 +485,21 @@ static int ost25_unlink(const char *path) {
 
 static int ost25_rmdir(const char *path) {
 	dir_t *current;
+	dir_t *p;
+	char *last = strrchr(path, '/');
+	char *path_p = (char *)calloc(last - path + 2, sizeof(char));
+	memcpy(path_p, path, last - path + 1);
+	path_p[last - path + 1] = '\0';
+
+	if (search_dir(path_p, &p) != 0) {
+		free(path_p);
+		return -ENOENT;
+	}
+
+	free(path_p);
+	int permission = check_permission(p);
+	if ((permission & 02) == 0)
+		return -EACCES;
 
 	if (search_dir(path, &current) != 0)
 		return -ENOENT;
