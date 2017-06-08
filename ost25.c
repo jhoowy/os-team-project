@@ -159,11 +159,8 @@ static int ost25_access(const char *path, int mask) {
 	if (search_dir(path, &current) != 0)
 		return -ENOENT;
 
-	if ((mask & 01) == 0)
-		return -EACCES;
-
 	int permission = check_permission(current);
-	if ((permission & 01) == 0)
+	if (current->md.st_mode & S_IFDIR && (permission & 01) == 0)
 		return -EACCES;
 	
 	return 0;
@@ -647,3 +644,4 @@ int main(int argc, char *argv[])
 {
 	return fuse_main(argc, argv, &ost25_oper, NULL);
 }
+
