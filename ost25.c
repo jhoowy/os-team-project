@@ -184,18 +184,15 @@ static int ost25_getattr(const char *path, struct stat *stbuf)
 static int ost25_opendir(const char *path, struct fuse_file_info *fi) {
 	dir_t *current;
 
-	if (fi != NULL && (dir_t*)fi->fh != NULL) {
-		current = (dir_t *)fi->fh;
+	if (search_dir(path, &current) != 0){
+		return -ENOENT;
 	}
-	else {
-		if (search_dir(path, &current) != 0){
-			return -ENOENT;
-		}
-	}
-	
+		
 	int permission = check_permission(current);
 	if ((permission & 04) == 0)
 		return -EACCES;
+
+	fi->fh = (uint64_t)current;
 
 	return 0;
 }
